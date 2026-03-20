@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "deploy": "npm run build && gh-pages -d build",
+    "deploy": "npm run build && gh-pages -d build --nojekyll",
     "preview": "vite preview"
   },
   "devDependencies": {
