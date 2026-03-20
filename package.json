@@ -1,0 +1,30 @@
+{
+  "name": "territory",
+  "private": false,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "deploy": "npm run build && gh-pages -d build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.55.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tailwindcss/vite": "^4.2.2",
+    "svelte": "^5.15.0",
+    "tailwindcss": "^4.2.2",
+    "vite": "^6.0.5"
+  },
+  "dependencies": {
+    "@turf/turf": "^7.2.0",
+    "gh-pages": "^6.3.0",
+    "jszip": "^3.10.1",
+    "leaflet": "^1.9.4",
+    "leaflet-draw": "^1.0.4",
+    "osmtogeojson": "https://github.com/tyrasd/osmtogeojson#snyk-fix-65371a4c4920389f7e5127c141088511",
+    "three": "^0.172.0"
+  }
+}

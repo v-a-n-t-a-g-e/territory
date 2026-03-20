@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: space;
+  src: url("/SpaceGrotesk-Regular.woff2");
+  font-weight: normal;
+}
+
+@font-face {
+  font-family: space;
+  src: url("/SpaceGrotesk-Medium.woff2");
+  font-weight: bold;
+}
+
+@theme {
+  --font-sans: space, ui-sans-serif, system-ui, sans-serif;
+  --color-accent: lime;
+}
+
+body {
+  font-feature-settings: "liga", "ss03", "ss02";
+  text-rendering: geometricPrecision;
+}
