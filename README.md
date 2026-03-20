@@ -1,5 +1,5 @@
-# Vantage scene setup
+# Vantage Territory
 
 Export the relevant data to setup Vantage.
 
-<img width="1253" alt="Screenshot 2025-01-14 at 17 09 33" src="https://github.com/user-attachments/assets/88347ac7-a3c6-4bfe-a680-eb8c1ff071db" />
+<img width="1507" height="791" alt="image" src="https://github.com/user-attachments/assets/1bb48465-0ad9-4d70-9920-af6e28d6acf5" />
