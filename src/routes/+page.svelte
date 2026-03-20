@@ -417,28 +417,24 @@
       <!-- Feature colours (hidden when satellite/map is projected) -->
       <div class="px-3 py-3 flex flex-col gap-2">
         <p class="text-base text-gray-500">Colours</p>
-        {#if !textureGround}
-          <div class="h-10 flex items-center justify-between">
-            <label for="color-ground" class="text-base">Ground</label>
-            <input
-              id="color-ground"
-              type="color"
-              bind:value={groundColor}
-              class="w-7 h-7 border border-black cursor-pointer p-0"
-            />
-          </div>
-        {/if}
-        {#if !textureBuildings}
-          <div class="h-10 flex items-center justify-between">
-            <label for="color-buildings" class="text-base">Buildings</label>
-            <input
-              id="color-buildings"
-              type="color"
-              bind:value={buildingColor}
-              class="w-7 h-7 border border-black cursor-pointer p-0"
-            />
-          </div>
-        {/if}
+        <div class="h-10 flex items-center justify-between">
+          <label for="color-ground" class="text-base">Ground</label>
+          <input
+            id="color-ground"
+            type="color"
+            bind:value={groundColor}
+            class="w-7 h-7 border border-black cursor-pointer p-0"
+          />
+        </div>
+        <div class="h-10 flex items-center justify-between">
+          <label for="color-buildings" class="text-base">Buildings</label>
+          <input
+            id="color-buildings"
+            type="color"
+            bind:value={buildingColor}
+            class="w-7 h-7 border border-black cursor-pointer p-0"
+          />
+        </div>
         {#if !textureGround}
           {#each Object.keys(DEFAULT_PALETTE) as key}
             <div class="h-10 flex items-center justify-between">
@@ -451,9 +447,6 @@
               />
             </div>
           {/each}
-        {/if}
-        {#if textureGround && textureBuildings}
-          <p class="text-sm text-gray-400">Disable projection to edit colours.</p>
         {/if}
       </div>
     </div>
