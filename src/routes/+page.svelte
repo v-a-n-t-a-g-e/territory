@@ -417,7 +417,7 @@
       <!-- Feature colours (hidden when satellite/map is projected) -->
       <div class="px-3 py-3 flex flex-col gap-2">
         <p class="text-base text-gray-500">Colours</p>
-        <div class="h-10 flex items-center justify-between">
+        <div class=" flex items-center justify-between">
           <label for="color-ground" class="text-base">Ground</label>
           <input
             id="color-ground"
@@ -426,7 +426,7 @@
             class="w-7 h-7 border border-black cursor-pointer p-0"
           />
         </div>
-        <div class="h-10 flex items-center justify-between">
+        <div class=" flex items-center justify-between">
           <label for="color-buildings" class="text-base">Buildings</label>
           <input
             id="color-buildings"
