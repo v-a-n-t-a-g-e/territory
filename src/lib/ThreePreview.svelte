@@ -75,11 +75,24 @@
     }
   });
 
-  // Color-only: update materials in-place, zero geometry work
   $effect(() => {
     void groundColor;
+    if (scene) untrack(() => {
+      scene.traverse((child) => {
+        if (!child.isMesh || !child.material || child.material.map) return;
+        if (child.userData.ground) child.material.color.set(groundColor);
+      });
+    });
+  });
+
+  $effect(() => {
     void buildingColor;
-    if (scene) untrack(updateMaterialColors);
+    if (scene) untrack(() => {
+      scene.traverse((child) => {
+        if (!child.isMesh || !child.material || child.material.map) return;
+        if (child.parent?.userData?.buildings) child.material.color.set(buildingColor);
+      });
+    });
   });
 
   // Feature palette: rebuild feature meshes only (fast, no I/O)
@@ -134,17 +147,7 @@
       });
   }
 
-  function updateMaterialColors() {
-    scene.traverse((child) => {
-      if (!child.isMesh || !child.material || child.material.map) return;
-      const inGround    = child.userData.ground    || child.parent?.userData?.ground;
-      const inBuildings = child.userData.buildings || child.parent?.userData?.buildings;
-      if (inGround)    child.material.color.set(groundColor);
-      if (inBuildings) child.material.color.set(buildingColor);
-    });
-  }
-
-  function buildGroundMesh(canvas, elevData) {
+function buildGroundMesh(canvas, elevData) {
     clearByTag('ground');
     const obj = useElevation && elevData
       ? createClippedTerrainMesh(latlngs, southWest, northEast, currentRefPoint, elevData, textureGround ? canvas : null, 64, groundDepth)
@@ -156,7 +159,7 @@
         const tex = child.material.map;
         child.material.dispose();
         child.material = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });
-      } else if (!textureGround) {
+      } else {
         child.material.dispose();
         child.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(groundColor), side: THREE.DoubleSide });
       }
@@ -209,11 +212,11 @@
       texture.colorSpace = THREE.SRGBColorSpace;
       const { tops, sides } = cachedSplitGeometry;
       if (tops)  group.add(new THREE.Mesh(tops,  new THREE.MeshBasicMaterial({ map: texture })));
-      if (sides) group.add(new THREE.Mesh(sides, new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8 })));
+      if (sides) group.add(new THREE.Mesh(sides, new THREE.MeshStandardMaterial({ color: new THREE.Color(buildingColor) })));
     } else {
       group.add(new THREE.Mesh(
         cachedBuildingGeometry,
-        new THREE.MeshStandardMaterial({ color: new THREE.Color(buildingColor), roughness: 0.7 }),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(buildingColor) }),
       ));
     }
 

@@ -35,6 +35,9 @@
   let searching = $state(false);
   let searchResults = $state([]);
 
+  // OSM historical year (empty = current)
+  let osmYear = $state("");
+
   // Settings (export + 3D preview)
   let height = $state(4);
   let fallbackHeight = $state(1);
@@ -126,6 +129,7 @@
         (v) => (southWest = v),
         (v) => (northEast = v),
         (msg) => (fetchStatus = msg),
+        osmYear ? `${osmYear}-01-01` : null,
       );
       clipData(latlngs, osmGeoJSON, clippedGeoJSON);
     } catch (err) {
@@ -151,6 +155,8 @@
         useElevation,
         groundDepth,
         featurePalette,
+        groundColor,
+        buildingColor,
       });
     } catch (err) {
       error = err.message ?? "Export failed.";
@@ -290,6 +296,19 @@
         </div>
       {/if}
 
+      <div class="h-7 px-3 flex items-center justify-between">
+        <label for="osm-year" class="text-base text-gray-500">Year</label>
+        <input
+          id="osm-year"
+          type="number"
+          bind:value={osmYear}
+          min="2004"
+          max={new Date().getFullYear()}
+          placeholder={new Date().getFullYear()}
+          class="w-20 text-base text-right px-1 focus:outline-none"
+        />
+      </div>
+
       <button
         onclick={getData}
         disabled={!canFetch || loading === "fetch"}
@@ -327,8 +346,10 @@
       <Layers bind:selectedLayer class="" />
 
       <!-- Level height -->
-      <div class="h-10 px-3 flex items-center justify-between">
-        <label for="level-height" class="text-base text-gray-500">Level height</label>
+      <div class="h-7 px-3 flex items-center justify-between">
+        <label for="level-height" class="text-base text-gray-500"
+          >Level height</label
+        >
         <div class="flex items-center gap-1">
           <input
             id="level-height"
@@ -337,15 +358,17 @@
             min="2"
             max="12"
             step="0.5"
-            class="w-16 text-base text-right border border-black px-1 focus:outline-none"
+            class="w-16 text-base text-right px-1 focus:outline-none"
           />
           <span class="text-base text-gray-400">m</span>
         </div>
       </div>
 
       <!-- Fallback height -->
-      <div class="h-10 px-3 flex items-center justify-between">
-        <label for="fallback-height" class="text-base text-gray-500">Fallback height</label>
+      <div class="h-7 px-3 flex items-center justify-between">
+        <label for="fallback-height" class="text-base text-gray-500"
+          >Fallback height</label
+        >
         <div class="flex items-center gap-1">
           <input
             id="fallback-height"
@@ -354,15 +377,17 @@
             min="1"
             max="100"
             step="1"
-            class="w-16 text-base text-right border border-black px-1 focus:outline-none"
+            class="w-16 text-base text-right px-1 focus:outline-none"
           />
           <span class="text-base text-gray-400">m</span>
         </div>
       </div>
 
       <!-- Ground depth -->
-      <div class="h-10 px-3 flex items-center justify-between">
-        <label for="ground-depth" class="text-base text-gray-500">Ground depth</label>
+      <div class="h-7 px-3 flex items-center justify-between">
+        <label for="ground-depth" class="text-base text-gray-500"
+          >Ground depth</label
+        >
         <div class="flex items-center gap-1">
           <input
             id="ground-depth"
@@ -371,7 +396,7 @@
             min="0"
             max="200"
             step="5"
-            class="w-16 text-base text-right border border-black px-1 focus:outline-none"
+            class="w-16 text-base text-right px-1 focus:outline-none"
           />
           <span class="text-base text-gray-400">m</span>
         </div>
@@ -438,7 +463,9 @@
         {#if !textureGround}
           {#each Object.keys(DEFAULT_PALETTE) as key}
             <div class="h-10 flex items-center justify-between">
-              <label for="color-{key}" class="text-base">{PALETTE_LABELS[key]}</label>
+              <label for="color-{key}" class="text-base"
+                >{PALETTE_LABELS[key]}</label
+              >
               <input
                 id="color-{key}"
                 type="color"

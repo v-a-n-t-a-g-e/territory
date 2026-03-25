@@ -12,6 +12,7 @@
   let map = null;
   let currentLayer = null;
   let geoJSONLayer = null;
+  let searchMarker = null;
   let drawHandlersReady = $state(false);
   const handlers = {};
 
@@ -38,7 +39,19 @@
   });
 
   $effect(() => { if (selectedLayer !== undefined) setupLayer(selectedLayer); });
-  $effect(() => { if (flyTo && map) map.flyTo([flyTo.lat, flyTo.lng], flyTo.zoom ?? 14); });
+  $effect(() => {
+    if (flyTo && map) {
+      map.flyTo([flyTo.lat, flyTo.lng], flyTo.zoom ?? 14);
+      if (searchMarker) { map.removeLayer(searchMarker); }
+      const pinIcon = L.divIcon({
+        className: '',
+        html: `<svg width="24" height="36" viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 24 12 24s12-15 12-24C24 5.373 18.627 0 12 0z" fill="#000"/><circle cx="12" cy="12" r="5" fill="#fff"/></svg>`,
+        iconSize: [24, 36],
+        iconAnchor: [12, 36],
+      });
+      searchMarker = L.marker([flyTo.lat, flyTo.lng], { icon: pinIcon }).addTo(map);
+    }
+  });
 
   // Activate / deactivate draw handlers based on drawTool prop
   $effect(() => {

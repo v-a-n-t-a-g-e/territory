@@ -3,13 +3,13 @@ import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { generateMergedBuildingsGeometry } from '$lib/buildingFactory.js';
 import { generateFeaturesGeometry, DEFAULT_PALETTE } from '$lib/featureFactory.js';
-import { fetchElevationData, createTerrainMesh } from '$lib/elevation.js';
+import { fetchElevationData, createClippedTerrainMesh } from '$lib/elevation.js';
 import { toLocal, latLngToTile, latLngToPixel } from '$lib/coords.js';
 
 export async function downloadData({
   clippedGeoJSON, latlngs, southWest, northEast, selectedLayer, referencePoint,
   textureGround = true, textureBuildings = false, useElevation = false, groundDepth = 0,
-  featurePalette = DEFAULT_PALETTE,
+  featurePalette = DEFAULT_PALETTE, groundColor = '#cccccc', buildingColor = '#fafafa',
 }) {
   if (!clippedGeoJSON) return;
 
@@ -53,26 +53,19 @@ export async function downloadData({
   try {
     const buildingGeometry = generateMergedBuildingsGeometry(clippedGeoJSON, referencePoint, getElevation);
     if (buildingGeometry) {
+      const group = new THREE.Group();
+      group.name = 'Buildings';
       if (textureBuildings && mapCanvas) {
-        // Split into top faces (textured) and side faces (plain gray).
         const uvRef = bboxToLocalUVRef(southWest, northEast, referencePoint);
         const texture = new THREE.CanvasTexture(mapCanvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
         const { tops, sides } = splitByFaceOrientation(buildingGeometry, uvRef);
-        if (tops) {
-          const m = new THREE.Mesh(tops, new THREE.MeshStandardMaterial({ map: texture }));
-          m.name = 'BuildingsTops';
-          scene.add(m);
-        }
-        if (sides) {
-          const m = new THREE.Mesh(sides, new THREE.MeshStandardMaterial({ color: 0x999999 }));
-          m.name = 'BuildingsSides';
-          scene.add(m);
-        }
+        if (tops)  group.add(new THREE.Mesh(tops,  new THREE.MeshBasicMaterial({ map: texture })));
+        if (sides) group.add(new THREE.Mesh(sides, new THREE.MeshStandardMaterial({ color: new THREE.Color(buildingColor) })));
       } else {
-        const mesh = new THREE.Mesh(buildingGeometry, new THREE.MeshStandardMaterial({ color: 0x999999 }));
-        mesh.name = 'Buildings';
-        scene.add(mesh);
+        group.add(new THREE.Mesh(buildingGeometry, new THREE.MeshStandardMaterial({ color: new THREE.Color(buildingColor) })));
       }
+      scene.add(group);
     }
 
     // Land features (roads, parks, water, etc.) — omitted when ground texture is projected
@@ -82,18 +75,23 @@ export async function downloadData({
     }
 
     // Ground: terrain mesh when elevation is enabled, flat polygon otherwise
-    if (elevationData) {
-      const terrain = createTerrainMesh(
-        southWest, northEast, referencePoint, elevationData,
-        textureGround ? mapCanvas : null, 64, groundDepth
-      );
-      if (terrain) scene.add(terrain);
-    } else {
-      const ground = createTexturedGround(
-        latlngs, southWest, northEast, referencePoint,
-        textureGround ? mapCanvas : null, groundDepth
-      );
-      if (ground) scene.add(ground);
+    const groundObj = elevationData
+      ? createClippedTerrainMesh(latlngs, southWest, northEast, referencePoint, elevationData, textureGround ? mapCanvas : null, 64, groundDepth)
+      : createTexturedGround(latlngs, southWest, northEast, referencePoint, textureGround ? mapCanvas : null, groundDepth);
+
+    if (groundObj) {
+      groundObj.traverse((child) => {
+        if (!child.isMesh) return;
+        if (textureGround && child.material?.map) {
+          const tex = child.material.map;
+          child.material.dispose();
+          child.material = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });
+        } else {
+          child.material.dispose();
+          child.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(groundColor), side: THREE.DoubleSide });
+        }
+      });
+      scene.add(groundObj);
     }
 
     const exporter = new GLTFExporter();

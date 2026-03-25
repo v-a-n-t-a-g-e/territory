@@ -1,7 +1,7 @@
 import osmtogeojson from 'osmtogeojson';
 import * as turf from '@turf/turf';
 
-export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorthEast, onStatus) {
+export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorthEast, onStatus, date = null) {
   if (!latlngs) return;
 
   let southWest, northEast;
@@ -29,14 +29,21 @@ export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorth
   // already tags on those same elements, no need for separate queries.
   // `out geom qt` embeds coordinates directly into each element — avoids the
   // expensive recursive node lookup (`>`) that caused 504s on larger queries.
-  const query = `[out:json][timeout:60];(way["building"](${bbox});relation["building"](${bbox});way["building:part"](${bbox});relation["building:part"](${bbox});way["highway"](${bbox});way["railway"~"rail|tram|subway|light_rail|monorail|narrow_gauge"](${bbox});way["landuse"](${bbox});relation["landuse"](${bbox});way["leisure"~"park|garden|pitch|playground|golf_course|recreation_ground"](${bbox});relation["leisure"~"park|garden|golf_course"](${bbox});way["natural"~"water|wood|forest|scrub|heath|grassland|beach|sand|wetland"](${bbox});relation["natural"~"water|wood|forest|wetland"](${bbox});way["waterway"~"river|stream|canal|drain"](${bbox});way["amenity"~"parking"](${bbox}););out geom qt;`;
+  const dateFilter = date ? `[date:"${date}T00:00:00Z"]` : '';
+  const query = `[out:json]${dateFilter}[timeout:60];(way["building"](${bbox});relation["building"](${bbox});way["building:part"](${bbox});relation["building:part"](${bbox});way["highway"](${bbox});way["railway"~"rail|tram|subway|light_rail|monorail|narrow_gauge"](${bbox});way["landuse"](${bbox});relation["landuse"](${bbox});way["leisure"~"park|garden|pitch|playground|golf_course|recreation_ground"](${bbox});relation["leisure"~"park|garden|golf_course"](${bbox});way["natural"~"water|wood|forest|scrub|heath|grassland|beach|sand|wetland"](${bbox});relation["natural"~"water|wood|forest|wetland"](${bbox});way["waterway"~"river|stream|canal|drain"](${bbox});way["amenity"~"parking"](${bbox}););out geom qt;`;
 
-  // Multiple public Overpass endpoints — tried in order on failure
-  const endpoints = [
-    { label: 'overpass-api.de', url: 'https://overpass-api.de/api/interpreter' },
-    { label: 'kumi.systems', url: 'https://overpass.kumi.systems/api/interpreter' },
-    { label: 'mail.ru mirror', url: 'https://maps.mail.ru/osm/tools/overpass/api/interpreter' },
-  ];
+  // Historical queries (Attic) are only supported by overpass-api.de and are much slower.
+  // Live queries can fall back to additional mirrors.
+  const endpoints = date
+    ? [{ label: 'overpass-api.de', url: 'https://overpass-api.de/api/interpreter' }]
+    : [
+        { label: 'overpass-api.de', url: 'https://overpass-api.de/api/interpreter' },
+        { label: 'kumi.systems', url: 'https://overpass.kumi.systems/api/interpreter' },
+        { label: 'mail.ru mirror', url: 'https://maps.mail.ru/osm/tools/overpass/api/interpreter' },
+      ];
+
+  // Historical queries need more time (Attic DB is slower)
+  const clientTimeout = date ? 90_000 : 35_000;
 
   let lastErr;
   for (let i = 0; i < endpoints.length; i++) {
@@ -44,8 +51,7 @@ export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorth
     onStatus?.(`Fetching via ${label}… (${i + 1}/${endpoints.length})`);
     try {
       const controller = new AbortController();
-      // 35s client timeout — shorter than gateway timeouts so we can fail fast
-      const timer = setTimeout(() => controller.abort(), 35_000);
+      const timer = setTimeout(() => controller.abort(), clientTimeout);
       const response = await fetch(url, {
         method: 'POST',
         body: `data=${encodeURIComponent(query)}`,
@@ -63,7 +69,8 @@ export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorth
     }
   }
   onStatus?.('');
-  throw new Error('All Overpass servers are unavailable. Try a smaller area or retry later.');
+  const reason = lastErr?.message ?? 'unknown error';
+  throw new Error(`Overpass query failed: ${reason}. ${date ? 'Historical queries require overpass-api.de — check your connection or try again.' : 'Try a smaller area or retry later.'}`);
 }
 
 export function clipData(latlngs, osmGeoJSONStore, clippedGeoJSONStore) {
