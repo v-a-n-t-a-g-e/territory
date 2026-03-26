@@ -9,7 +9,7 @@
   } from "$lib/stores.js";
   import { fetchData, clipData } from "$lib/overpass.js";
   import { downloadData } from "$lib/utils.js";
-  import { DEFAULT_PALETTE, PALETTE_LABELS } from "$lib/featureFactory.js";
+  import { DEFAULT_PALETTE, PALETTE_LABELS, getActivePaletteKeys } from "$lib/featureFactory.js";
   import Map from "$lib/Map.svelte";
   import Layers from "$lib/Layers.svelte";
   import ThreePreview from "$lib/ThreePreview.svelte";
@@ -21,6 +21,10 @@
   let latlngs = $state([]);
   let flyTo = $state(null);
   let activeTool = $state(null); // 'polygon' | 'rectangle' | 'circle' | null
+
+  // View state
+  let showModel = $state(false);
+  let fetchController = $state(null);
 
   // Fetch state
   let southWest = $state(null);
@@ -64,8 +68,11 @@
     }
   });
 
-  const canFetch = $derived(!!area && area <= 8_000_000);
-  const tooLarge = $derived(!!area && area > 8_000_000);
+  const canFetch = $derived(!!area && area <= 25_000_000);
+  const activePaletteKeys = $derived(
+    !textureGround && $clippedGeoJSON ? getActivePaletteKeys($clippedGeoJSON) : new Set()
+  );
+  const tooLarge = $derived(!!area && area > 25_000_000);
 
   async function searchLocation() {
     const q = searchQuery.trim();
@@ -122,6 +129,7 @@
     loading = "fetch";
     error = "";
     fetchStatus = "";
+    fetchController = new AbortController();
     try {
       await fetchData(
         latlngs,
@@ -130,13 +138,16 @@
         (v) => (northEast = v),
         (msg) => (fetchStatus = msg),
         osmYear ? `${osmYear}-01-01` : null,
+        fetchController.signal,
       );
       clipData(latlngs, osmGeoJSON, clippedGeoJSON);
+      showModel = true;
     } catch (err) {
-      error = err.message ?? "Overpass API unavailable.";
+      if (err.name !== 'AbortError') error = err.message ?? "Overpass API unavailable.";
     }
     loading = "";
     fetchStatus = "";
+    fetchController = null;
   }
 
   async function download() {
@@ -164,8 +175,15 @@
     loading = "";
   }
 
-  function redraw() {
+  function backToMap() {
+    showModel = false;
+  }
+
+  function clearArea() {
+    showModel = false;
     $clippedGeoJSON = null;
+    area = null;
+    latlngs = [];
   }
 </script>
 
@@ -173,7 +191,7 @@
   <!-- Map (always mounted to preserve drawn shape, hidden after fetch) -->
   <div
     class="absolute inset-0"
-    style:visibility={$clippedGeoJSON ? "hidden" : "visible"}
+    style:visibility={showModel ? "hidden" : "visible"}
   >
     <Map
       {selectedLayer}
@@ -185,7 +203,7 @@
   </div>
 
   <!-- 3D Preview (full screen, only after fetch) -->
-  {#if $clippedGeoJSON}
+  {#if showModel && $clippedGeoJSON}
     <div class="absolute inset-0">
       <ThreePreview
         {featurePalette}
@@ -207,7 +225,7 @@
   <div
     class="absolute top-4 left-4 z-[1000] w-80 flex flex-col gap-3 max-h-[calc(100vh-2rem)] overflow-y-auto"
   >
-    {#if !$clippedGeoJSON}
+    {#if !showModel}
       <!-- Search -->
       <div class="flex flex-col bg-white border border-black">
         <div class="flex divide-x divide-black">
@@ -270,13 +288,20 @@
     <div
       class="flex flex-col divide-y divide-black bg-white border border-black"
     >
-      {#if $clippedGeoJSON}
+      {#if showModel}
         <button
-          onclick={redraw}
+          onclick={backToMap}
           class="h-10 text-left text-base px-3 transition-colors hover:bg-accent"
-        >
-          ← Redraw
-        </button>
+        >← Map</button>
+      {:else if $clippedGeoJSON}
+        <button
+          onclick={() => (showModel = true)}
+          class="h-10 text-left text-base px-3 transition-colors hover:bg-accent"
+        >→ Model</button>
+        <button
+          onclick={clearArea}
+          class="h-10 text-left text-base px-3 transition-colors hover:bg-accent"
+        >Redraw</button>
       {:else if !area}
         <div class="h-10 px-3 flex items-center text-base text-gray-400">
           Draw a shape on the map.
@@ -291,8 +316,12 @@
         <div class="px-3 py-2 text-base text-red-600">{error}</div>
       {/if}
       {#if fetchStatus}
-        <div class="h-10 px-3 flex items-center text-base text-gray-400">
-          {fetchStatus}
+        <div class="h-10 px-3 flex items-center justify-between text-xs text-gray-400">
+          <span>{fetchStatus}</span>
+          <button
+            onclick={() => fetchController?.abort()}
+            class="text-xs text-black hover:bg-accent px-2 h-full transition-colors"
+          >Stop</button>
         </div>
       {/if}
 
@@ -334,7 +363,7 @@
   </div>
 
   <!-- ── Right overlay: scene settings (only after fetch) ─────────────────── -->
-  {#if $clippedGeoJSON}
+  {#if showModel && $clippedGeoJSON}
     <div
       class="absolute top-4 right-4 z-[1000] w-72 bg-white border border-black overflow-y-auto flex flex-col divide-y divide-black max-h-[calc(100vh-2rem)]"
     >
@@ -460,21 +489,17 @@
             class="w-7 h-7 border border-black cursor-pointer p-0"
           />
         </div>
-        {#if !textureGround}
-          {#each Object.keys(DEFAULT_PALETTE) as key}
-            <div class="h-10 flex items-center justify-between">
-              <label for="color-{key}" class="text-base"
-                >{PALETTE_LABELS[key]}</label
-              >
-              <input
-                id="color-{key}"
-                type="color"
-                bind:value={featurePalette[key]}
-                class="w-7 h-7 border border-black cursor-pointer p-0"
-              />
-            </div>
-          {/each}
-        {/if}
+        {#each [...activePaletteKeys] as key}
+          <div class="h-10 flex items-center justify-between">
+            <label for="color-{key}" class="text-base">{PALETTE_LABELS[key]}</label>
+            <input
+              id="color-{key}"
+              type="color"
+              bind:value={featurePalette[key]}
+              class="w-7 h-7 border border-black cursor-pointer p-0"
+            />
+          </div>
+        {/each}
       </div>
     </div>
   {/if}

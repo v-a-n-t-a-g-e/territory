@@ -1,7 +1,7 @@
 import osmtogeojson from 'osmtogeojson';
 import * as turf from '@turf/turf';
 
-export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorthEast, onStatus, date = null) {
+export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorthEast, onStatus, date = null, signal = null) {
   if (!latlngs) return;
 
   let southWest, northEast;
@@ -30,12 +30,15 @@ export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorth
   // `out geom qt` embeds coordinates directly into each element — avoids the
   // expensive recursive node lookup (`>`) that caused 504s on larger queries.
   const dateFilter = date ? `[date:"${date}T00:00:00Z"]` : '';
-  const query = `[out:json]${dateFilter}[timeout:60];(way["building"](${bbox});relation["building"](${bbox});way["building:part"](${bbox});relation["building:part"](${bbox});way["highway"](${bbox});way["railway"~"rail|tram|subway|light_rail|monorail|narrow_gauge"](${bbox});way["landuse"](${bbox});relation["landuse"](${bbox});way["leisure"~"park|garden|pitch|playground|golf_course|recreation_ground"](${bbox});relation["leisure"~"park|garden|golf_course"](${bbox});way["natural"~"water|wood|forest|scrub|heath|grassland|beach|sand|wetland"](${bbox});relation["natural"~"water|wood|forest|wetland"](${bbox});way["waterway"~"river|stream|canal|drain"](${bbox});way["amenity"~"parking"](${bbox}););out geom qt;`;
+  const query = date
+    ? `[out:json]${dateFilter};(way["building"](${bbox});relation["building"](${bbox});way["building:part"](${bbox});relation["building:part"](${bbox}););out geom qt;`
+    : `[out:json][timeout:60];(way["building"](${bbox});relation["building"](${bbox});way["building:part"](${bbox});relation["building:part"](${bbox});way["highway"](${bbox});way["railway"~"rail|tram|subway|light_rail|monorail|narrow_gauge"](${bbox});way["landuse"](${bbox});relation["landuse"](${bbox});way["leisure"~"park|garden|pitch|playground|golf_course|recreation_ground"](${bbox});relation["leisure"~"park|garden|golf_course"](${bbox});way["natural"~"water|wood|forest|scrub|heath|grassland|beach|sand|wetland"](${bbox});relation["natural"~"water|wood|forest|wetland"](${bbox});way["waterway"~"river|stream|canal|drain"](${bbox});way["amenity"~"parking"](${bbox}););out geom qt;`;
 
-  // Historical queries (Attic) are only supported by overpass-api.de and are much slower.
-  // Live queries can fall back to additional mirrors.
   const endpoints = date
-    ? [{ label: 'overpass-api.de', url: 'https://overpass-api.de/api/interpreter' }]
+    ? [
+        { label: 'overpass-api.de', url: 'https://overpass-api.de/api/interpreter' },
+        { label: 'kumi.systems', url: 'https://overpass.kumi.systems/api/interpreter' },
+      ]
     : [
         { label: 'overpass-api.de', url: 'https://overpass-api.de/api/interpreter' },
         { label: 'kumi.systems', url: 'https://overpass.kumi.systems/api/interpreter' },
@@ -47,11 +50,13 @@ export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorth
 
   let lastErr;
   for (let i = 0; i < endpoints.length; i++) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const { label, url } = endpoints[i];
     onStatus?.(`Fetching via ${label}… (${i + 1}/${endpoints.length})`);
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), clientTimeout);
+      signal?.addEventListener('abort', () => controller.abort(), { once: true });
       const response = await fetch(url, {
         method: 'POST',
         body: `data=${encodeURIComponent(query)}`,
@@ -64,6 +69,7 @@ export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorth
       onStatus?.('');
       return;
     } catch (err) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       console.warn(`Overpass endpoint failed (${url}):`, err.message);
       lastErr = err;
     }

@@ -190,6 +190,18 @@ function classify(props) {
 
 // ─── Public export ────────────────────────────────────────────────────────────
 
+export function getActivePaletteKeys(geo) {
+  if (!geo?.features) return new Set();
+  const keys = new Set();
+  for (const feature of geo.features) {
+    const props = feature.properties ?? {};
+    if (props.building || props['building:part']) continue;
+    const cls = classify(props);
+    if (cls) keys.add(cls.paletteKey);
+  }
+  return keys;
+}
+
 export function generateFeaturesGeometry(geo, referencePoint, getElevation = null, palette = DEFAULT_PALETTE) {
   const byColor = new Map(); // hex color → BufferGeometry[]
 

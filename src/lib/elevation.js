@@ -124,8 +124,8 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
   const rows = segments + 1;
   const cols = segments + 1;
 
-  // Pre-compute all grid vertices and inside/outside flags
-  const vx = [], vy = [], vz = [], vu = [], vv = [], inside = [];
+  // Pre-compute all grid vertices, inside/outside flags, and geographic coords for clipping
+  const vx = [], vy = [], vz = [], vu = [], vv = [], inside = [], vlat = [], vlng = [];
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
       const t = i / (rows - 1);
@@ -137,21 +137,52 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
       vx.push(-sy); vy.push(elev); vz.push(-sx);
       vu.push(uRange !== 0 ? (sw.y - sy) / uRange : s);
       vv.push(vRange !== 0 ? (sx - sw.x) / vRange : (1 - t));
+      vlat.push(lat); vlng.push(lng);
       let inPoly = false;
       try { inPoly = turf.booleanPointInPolygon(turf.point([lng, lat]), clipPoly); } catch { inPoly = true; }
       inside.push(inPoly);
     }
   }
 
-  // Emit only triangles whose 3 vertices are all inside the polygon (non-indexed for simplicity)
   const pos = [], uv = [];
   const emit = (idx) => { pos.push(vx[idx], vy[idx], vz[idx]); uv.push(vu[idx], vv[idx]); };
+
+  // Emit a clipped triangle using turf intersection — handles boundary cells smoothly
+  const emitClipped = (ia, ib, ic) => {
+    try {
+      const ring = [[vlng[ia], vlat[ia]], [vlng[ib], vlat[ib]], [vlng[ic], vlat[ic]], [vlng[ia], vlat[ia]]];
+      const cl = turf.intersect(turf.featureCollection([turf.polygon([ring]), clipPoly]));
+      if (!cl?.geometry) return;
+      const coords = cl.geometry.type === 'Polygon'
+        ? cl.geometry.coordinates[0]
+        : cl.geometry.coordinates[0][0];
+      // Fan-triangulate the clipped polygon from first vertex
+      for (let k = 1; k < coords.length - 2; k++) {
+        for (const [lng, lat] of [coords[0], coords[k], coords[k + 1]]) {
+          const { x: sx, y: sy } = toLocal(lng, lat, referencePoint);
+          const elev = sampleAtLatLng(lat, lng) - minElevation;
+          pos.push(-sy, elev, -sx);
+          uv.push(
+            uRange !== 0 ? (sw.y - sy) / uRange : 0.5,
+            vRange !== 0 ? (sx - sw.x) / vRange : 0.5,
+          );
+        }
+      }
+    } catch {}
+  };
+
   for (let i = 0; i < rows - 1; i++) {
     for (let j = 0; j < cols - 1; j++) {
       const a = i * cols + j, b = i * cols + j + 1;
       const c = (i + 1) * cols + j, d = (i + 1) * cols + j + 1;
-      if (inside[a] && inside[c] && inside[b]) { emit(a); emit(c); emit(b); }
-      if (inside[b] && inside[c] && inside[d]) { emit(b); emit(c); emit(d); }
+      // Triangle 1: a, c, b
+      const all1 = inside[a] && inside[c] && inside[b];
+      const any1 = inside[a] || inside[c] || inside[b];
+      if (all1) { emit(a); emit(c); emit(b); } else if (any1) emitClipped(a, c, b);
+      // Triangle 2: b, c, d
+      const all2 = inside[b] && inside[c] && inside[d];
+      const any2 = inside[b] || inside[c] || inside[d];
+      if (all2) { emit(b); emit(c); emit(d); } else if (any2) emitClipped(b, c, d);
     }
   }
 
@@ -171,7 +202,7 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
 
   if (depth <= 0) return mesh;
 
-  // Skirt: trace the clipPoly boundary, dropping from terrain surface to y = -depth.
+  // Skirt: top follows the terrain surface, bottom is flat at y = -depth.
   const ring = clipPoly.geometry.coordinates[0]; // [[lng, lat], ...]
   const skirtPos = new Float32Array(ring.length * 6);
   for (let k = 0; k < ring.length; k++) {
@@ -195,7 +226,7 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
   const skirtMesh = new THREE.Mesh(skirtGeom, new THREE.MeshStandardMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide }));
   skirtMesh.name = 'TerrainSkirt';
 
-  // Bottom cap: flat polygon at y = -depth using the clip ring as outline.
+  // Bottom cap: flat polygon at y = -depth.
   const bottomShapeVerts = ring.map(([lng, lat]) => {
     const { x: sx, y: sy } = toLocal(lng, lat, referencePoint);
     return new THREE.Vector2(sx, sy);
@@ -205,7 +236,7 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
   bottomGeom.rotateX(-Math.PI / 2);
   bottomGeom.rotateY(Math.PI / 2);
   bottomGeom.translate(0, -depth, 0);
-  const bottomMesh = new THREE.Mesh(bottomGeom, new THREE.MeshStandardMaterial({ color: 0xaaaaaa, side: THREE.BackSide }));
+  const bottomMesh = new THREE.Mesh(bottomGeom, new THREE.MeshStandardMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide }));
   bottomMesh.name = 'TerrainBottom';
 
   const group = new THREE.Group();

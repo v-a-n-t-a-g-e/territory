@@ -227,8 +227,9 @@ export function createTexturedGround(latlngs, southWest, northEast, referencePoi
 
   geom.rotateX(-Math.PI / 2);
   geom.rotateY(Math.PI / 2);
-  const yOffset = -0.05;
-  geom.translate(0, yOffset, 0);
+  // Small offset keeps the top face just below building bases to prevent z-fighting.
+  // Sides and bottom are built from y=0 / y=-depth so the slab aligns cleanly.
+  geom.translate(0, -0.05, 0);
 
   const material = mapCanvas
     ? new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(mapCanvas) })
@@ -239,15 +240,14 @@ export function createTexturedGround(latlngs, southWest, northEast, referencePoi
 
   if (depth <= 0) return topMesh;
 
-  // Side walls: trace the outline in shape-space, emit pairs of top/bottom vertices
-  // already in final 3D space (after the virtual rotateX+rotateY).
+  // Side walls: top flush with building base (y=0), bottom at y=-depth.
   // Shape (sx, sy) → 3D (-sy, y, -sx) after rotation.
   const outline = shape.getPoints(128);
-  const sidePos = new Float32Array(outline.length * 6); // 2 verts × 3 floats per point
+  const sidePos = new Float32Array(outline.length * 6);
   for (let i = 0; i < outline.length; i++) {
     const sx = outline[i].x, sy = outline[i].y;
-    sidePos[i * 6]     = -sy; sidePos[i * 6 + 1] = yOffset;         sidePos[i * 6 + 2] = -sx; // top
-    sidePos[i * 6 + 3] = -sy; sidePos[i * 6 + 4] = yOffset - depth; sidePos[i * 6 + 5] = -sx; // bottom
+    sidePos[i * 6]     = -sy; sidePos[i * 6 + 1] = 0;      sidePos[i * 6 + 2] = -sx; // top
+    sidePos[i * 6 + 3] = -sy; sidePos[i * 6 + 4] = -depth; sidePos[i * 6 + 5] = -sx; // bottom
   }
   const sideIdx = [];
   for (let i = 0; i < outline.length; i++) {
@@ -263,12 +263,12 @@ export function createTexturedGround(latlngs, southWest, northEast, referencePoi
   const sideMesh = new THREE.Mesh(sideGeom, new THREE.MeshStandardMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide }));
   sideMesh.name = 'GroundSides';
 
-  // Bottom cap: clone the top geometry, shift it down, render back-faces so normals face downward
+  // Bottom cap: same shape as the top face shifted to y=-depth, DoubleSide so it's visible from below.
   const bottomGeom = geom.clone();
-  bottomGeom.translate(0, -depth, 0);
+  bottomGeom.translate(0, -depth + 0.05, 0); // geom sits at -0.05; move it to -depth
   const bottomMesh = new THREE.Mesh(
     bottomGeom,
-    new THREE.MeshStandardMaterial({ color: 0xaaaaaa, side: THREE.BackSide }),
+    new THREE.MeshStandardMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide }),
   );
   bottomMesh.name = 'GroundBottom';
 

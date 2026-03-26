@@ -32,8 +32,8 @@
     if (!selectedLayer) selectedLayer = defaultPreset;
   });
 
-  let xyzUrl = $state(defaultPreset.value);
-  let activePreset = $state(defaultPreset);
+  let xyzUrl = $state(selectedLayer?.value ?? defaultPreset.value);
+  let activePreset = $state(presets.find((p) => p.value === (selectedLayer?.value ?? defaultPreset.value)) ?? null);
 
   function selectPreset(preset) {
     activePreset = preset;
