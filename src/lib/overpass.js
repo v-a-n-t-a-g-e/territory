@@ -37,11 +37,11 @@ export async function fetchData(latlngs, osmGeoJSONStore, setSouthWest, setNorth
   const endpoints = date
     ? [
         { label: 'overpass-api.de', url: 'https://overpass-api.de/api/interpreter' },
-        { label: 'kumi.systems', url: 'https://overpass.kumi.systems/api/interpreter' },
+        { label: 'openstreetmap.fr', url: 'https://overpass.openstreetmap.fr/api/interpreter' },
       ]
     : [
         { label: 'overpass-api.de', url: 'https://overpass-api.de/api/interpreter' },
-        { label: 'kumi.systems', url: 'https://overpass.kumi.systems/api/interpreter' },
+        { label: 'openstreetmap.fr', url: 'https://overpass.openstreetmap.fr/api/interpreter' },
         { label: 'mail.ru mirror', url: 'https://maps.mail.ru/osm/tools/overpass/api/interpreter' },
       ];
 
