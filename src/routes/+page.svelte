@@ -352,40 +352,40 @@
         </div>
       {/if}
 
-      <div class="h-7 px-3 flex items-center justify-between">
-        <label for="osm-year" class="text-base text-gray-500">Year</label>
-        <input
-          id="osm-year"
-          type="number"
-          bind:value={osmYear}
-          min="2004"
-          max={new Date().getFullYear()}
-          placeholder={new Date().getFullYear()}
-          class="w-20 text-base text-right px-1 focus:outline-none"
-        />
-      </div>
+      {#if canFetch}
+        <div class="h-7 px-3 flex items-center justify-between">
+          <label for="osm-year" class="text-base text-gray-500">Year</label>
+          <input
+            id="osm-year"
+            type="number"
+            bind:value={osmYear}
+            min="2004"
+            max={new Date().getFullYear()}
+            placeholder={new Date().getFullYear()}
+            class="w-20 text-base text-right px-1 focus:outline-none"
+          />
+        </div>
 
-      <button
-        onclick={getData}
-        disabled={!canFetch || loading === "fetch"}
-        class="h-10 text-left text-base px-3 transition-colors
-          {!canFetch || loading === 'fetch'
-          ? 'text-gray-300 cursor-not-allowed'
-          : 'hover:bg-accent'}"
-      >
-        {loading === "fetch" ? "Fetching…" : "Generate 3D model"}
-      </button>
+        <button
+          onclick={getData}
+          disabled={loading === "fetch"}
+          class="h-10 text-left text-base px-3 transition-colors
+            {loading === 'fetch' ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-accent'}"
+        >
+          {loading === "fetch" ? "Fetching…" : "Generate 3D model"}
+        </button>
+      {/if}
 
-      <button
-        onclick={download}
-        disabled={!$clippedGeoJSON || loading === "download"}
-        class="h-10 text-left text-base px-3 transition-colors
-          {!$clippedGeoJSON || loading === 'download'
-          ? 'text-gray-300 cursor-not-allowed'
-          : 'hover:bg-accent'}"
-      >
-        {loading === "download" ? "Exporting…" : "2. Export Scene"}
-      </button>
+      {#if $clippedGeoJSON}
+        <button
+          onclick={download}
+          disabled={loading === "download"}
+          class="h-10 text-left text-base px-3 transition-colors
+            {loading === 'download' ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-accent'}"
+        >
+          {loading === "download" ? "Exporting…" : "Export Scene"}
+        </button>
+      {/if}
     </div>
   </div>
 
