@@ -9,7 +9,7 @@
   } from "$lib/stores.js";
   import { fetchData, clipData } from "$lib/overpass.js";
   import { downloadData } from "$lib/utils.js";
-  import { DEFAULT_PALETTE, PALETTE_LABELS, getActivePaletteKeys } from "$lib/featureFactory.js";
+  import { DEFAULT_PALETTE } from "$lib/featureFactory.js";
   import Map from "$lib/Map.svelte";
   import Layers from "$lib/Layers.svelte";
   import ThreePreview from "$lib/ThreePreview.svelte";
@@ -69,10 +69,17 @@
   });
 
   const canFetch = $derived(!!area && area <= 25_000_000);
-  const activePaletteKeys = $derived(
-    !textureGround && $clippedGeoJSON ? getActivePaletteKeys($clippedGeoJSON) : new Set()
-  );
   const tooLarge = $derived(!!area && area > 25_000_000);
+
+  // Custom map layer
+  let customXyzUrl = $state('');
+
+  function applyCustomLayer() {
+    if (!customXyzUrl?.trim()) return;
+    const normalised = customXyzUrl.trim().replace('{zoom}', '{z}');
+    customXyzUrl = normalised;
+    selectedLayer = { label: 'Custom', value: normalised, attribution: '' };
+  }
 
   async function searchLocation() {
     const q = searchQuery.trim();
@@ -225,6 +232,29 @@
   <div
     class="absolute top-4 left-4 z-[1000] w-80 flex flex-col gap-3 max-h-[calc(100vh-2rem)] overflow-y-auto"
   >
+    <!-- Tile layers (always visible) -->
+    <Layers bind:selectedLayer />
+
+    <!-- Custom map layer (always visible) -->
+    <div class="flex flex-col bg-white border border-black">
+      <div class="h-8 flex items-center border-b border-black">
+        <span class="text-base text-gray-500 px-3">Custom map layer</span>
+      </div>
+      <div class="h-8 flex items-center">
+        <input
+          type="text"
+          bind:value={customXyzUrl}
+          onkeydown={(e) => { if (e.key === 'Enter') applyCustomLayer(); }}
+          placeholder={"https://tile.server/{z}/{x}/{y}.png"}
+          class="h-8 flex-1 text-xs px-3 focus:outline-none font-mono min-w-0"
+        />
+        <button
+          onclick={applyCustomLayer}
+          class="h-8 px-3 text-xs hover:bg-accent transition-colors border-l border-black shrink-0"
+        >Apply</button>
+      </div>
+    </div>
+
     {#if !showModel}
       <!-- Search -->
       <div class="flex flex-col bg-white border border-black">
@@ -267,9 +297,6 @@
           </div>
         {/if}
       </div>
-
-      <!-- Tile layers -->
-      <Layers bind:selectedLayer />
 
       <!-- Draw tools -->
       <div class="flex divide-x divide-black bg-white border border-black">
@@ -346,7 +373,7 @@
           ? 'text-gray-300 cursor-not-allowed'
           : 'hover:bg-accent'}"
       >
-        {loading === "fetch" ? "Fetching…" : "1. Fetch & Clip"}
+        {loading === "fetch" ? "Fetching…" : "Generate 3D model"}
       </button>
 
       <button
@@ -370,9 +397,6 @@
       <!-- <div class="h-10 px-3 flex items-center text-base font-semibold shrink-0">
         Scene Settings
       </div> -->
-
-      <!-- Map layer -->
-      <Layers bind:selectedLayer class="" />
 
       <!-- Level height -->
       <div class="h-7 px-3 flex items-center justify-between">
@@ -489,17 +513,6 @@
             class="w-7 h-7 border border-black cursor-pointer p-0"
           />
         </div>
-        {#each [...activePaletteKeys] as key}
-          <div class="h-10 flex items-center justify-between">
-            <label for="color-{key}" class="text-base">{PALETTE_LABELS[key]}</label>
-            <input
-              id="color-{key}"
-              type="color"
-              bind:value={featurePalette[key]}
-              class="w-7 h-7 border border-black cursor-pointer p-0"
-            />
-          </div>
-        {/each}
       </div>
     </div>
   {/if}
