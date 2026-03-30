@@ -53,36 +53,82 @@ export async function fetchElevationData(southWest, northEast) {
   cropped.getContext('2d').drawImage(canvas, bboxX, bboxY, bboxW, bboxH, 0, 0, bboxW, bboxH);
 
   const { data } = cropped.getContext('2d').getImageData(0, 0, bboxW, bboxH);
+  const pixelCount = bboxW * bboxH;
 
   // Terrarium decode: elevation = R*256 + G + B/256 - 32768
-  function decode(r, g, b) {
+  function rawDecode(r, g, b) {
     return r * 256 + g + b / 256 - 32768;
   }
 
-  // Collect valid elevations (alpha > 0 means the tile loaded; alpha=0 means the
-  // canvas pixel was never written — tile failed or was out of range).
+  // First pass: decode all pixels, collect valid values for statistics
+  const elevArr = new Float32Array(pixelCount).fill(NaN);
+  const valid = [];
+  for (let i = 0; i < pixelCount; i++) {
+    const bi = i * 4;
+    if (data[bi + 3] < 128) continue; // tile didn't load
+    const v = rawDecode(data[bi], data[bi + 1], data[bi + 2]);
+    elevArr[i] = v;
+    valid.push(v);
+  }
+
+  // Compute IQR-based bounds and clamp outlier spikes in place
   let minElevation = 0;
   let fallbackElevation = 0;
-  {
-    const valid = [];
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i + 3] < 128) continue; // tile didn't load
-      valid.push(decode(data[i], data[i + 1], data[i + 2]));
-    }
-    if (valid.length > 0) {
-      valid.sort((a, b) => a - b);
-      minElevation = valid[0];
-      fallbackElevation = valid[Math.floor(valid.length / 2)]; // median
+  if (valid.length > 0) {
+    valid.sort((a, b) => a - b);
+    fallbackElevation = valid[Math.floor(valid.length / 2)]; // median
+    const q1 = valid[Math.floor(valid.length * 0.25)];
+    const q3 = valid[Math.floor(valid.length * 0.75)];
+    const iqr = q3 - q1;
+    const loClamp = q1 - 3 * iqr;
+    const hiClamp = q3 + 3 * iqr;
+    for (let i = 0; i < pixelCount; i++) {
+      if (!isNaN(elevArr[i])) elevArr[i] = Math.min(hiClamp, Math.max(loClamp, elevArr[i]));
     }
   }
 
+  // 3×3 median filter — removes isolated spike pixels that survive the IQR clamp
+  const buf = new Float32Array(9);
+  for (let y = 1; y < bboxH - 1; y++) {
+    for (let x = 1; x < bboxW - 1; x++) {
+      const i = y * bboxW + x;
+      if (isNaN(elevArr[i])) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const e = elevArr[(y + dy) * bboxW + (x + dx)];
+          if (!isNaN(e)) buf[n++] = e;
+        }
+      if (n < 5) continue; // don't filter edge-heavy pixels
+      buf.subarray(0, n).sort();
+      elevArr[i] = buf[Math.floor(n / 2)];
+    }
+  }
+
+  // Recompute minElevation from the filtered array so terrain and buildings share the same baseline
+  minElevation = Infinity;
+  for (let i = 0; i < pixelCount; i++) {
+    if (!isNaN(elevArr[i]) && elevArr[i] < minElevation) minElevation = elevArr[i];
+  }
+  if (!isFinite(minElevation)) minElevation = 0;
+
   function sampleAtUV(u, v) {
-    const px = Math.min(Math.max(Math.floor(u * bboxW), 0), bboxW - 1);
-    const py = Math.min(Math.max(Math.floor(v * bboxH), 0), bboxH - 1);
-    const i = (py * bboxW + px) * 4;
-    // Return median elevation for pixels that never loaded (CORS failure, missing tile)
-    if (data[i + 3] < 128) return fallbackElevation;
-    return decode(data[i], data[i + 1], data[i + 2]);
+    // Bilinear interpolation — smooths tile-seam discontinuities and isolated bad pixels
+    const fx = u * bboxW - 0.5;
+    const fy = v * bboxH - 0.5;
+    const x0 = Math.max(0, Math.floor(fx));
+    const y0 = Math.max(0, Math.floor(fy));
+    const x1 = Math.min(bboxW - 1, x0 + 1);
+    const y1 = Math.min(bboxH - 1, y0 + 1);
+    const tx = fx - x0;
+    const ty = fy - y0;
+    const s = (i) => { const e = elevArr[i]; return isNaN(e) ? fallbackElevation : e; };
+    return (
+      s(y0 * bboxW + x0) * (1 - tx) * (1 - ty) +
+      s(y0 * bboxW + x1) * tx       * (1 - ty) +
+      s(y1 * bboxW + x0) * (1 - tx) * ty +
+      s(y1 * bboxW + x1) * tx       * ty
+    );
   }
 
   // u=0=west, u=1=east; v=0=north (top of image), v=1=south

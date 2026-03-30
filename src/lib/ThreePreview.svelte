@@ -229,6 +229,7 @@ function buildGroundMesh(canvas, elevData) {
         elevationData = elevData;
         buildGroundMesh(satelliteCanvas, elevData);
         buildBuildingMeshes(satelliteCanvas, elevData);
+        buildFeatureMeshes(elevData);
       }).catch(console.error);
       return;
     }

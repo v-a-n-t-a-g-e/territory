@@ -71,7 +71,7 @@
       };
     }
 
-    map = L.map(mapContainer, { zoomControl: false }).setView([49, 11], 5);
+    map = L.map(mapContainer, { zoomControl: false }).setView([20, 0], 2);
     setupLayer(selectedLayer);
 
     const drawnItems = new L.FeatureGroup().addTo(map);

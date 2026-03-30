@@ -71,15 +71,6 @@
   const canFetch = $derived(!!area && area <= 25_000_000);
   const tooLarge = $derived(!!area && area > 25_000_000);
 
-  // Custom map layer
-  let customXyzUrl = $state('');
-
-  function applyCustomLayer() {
-    if (!customXyzUrl?.trim()) return;
-    const normalised = customXyzUrl.trim().replace('{zoom}', '{z}');
-    customXyzUrl = normalised;
-    selectedLayer = { label: 'Custom', value: normalised, attribution: '' };
-  }
 
   async function searchLocation() {
     const q = searchQuery.trim();
@@ -235,25 +226,6 @@
     <!-- Tile layers (always visible) -->
     <Layers bind:selectedLayer />
 
-    <!-- Custom map layer (always visible) -->
-    <div class="flex flex-col bg-white border border-black">
-      <div class="h-8 flex items-center border-b border-black">
-        <span class="text-base text-gray-500 px-3">Custom map layer</span>
-      </div>
-      <div class="h-8 flex items-center">
-        <input
-          type="text"
-          bind:value={customXyzUrl}
-          onkeydown={(e) => { if (e.key === 'Enter') applyCustomLayer(); }}
-          placeholder={"https://tile.server/{z}/{x}/{y}.png"}
-          class="h-8 flex-1 text-xs px-3 focus:outline-none font-mono min-w-0"
-        />
-        <button
-          onclick={applyCustomLayer}
-          class="h-8 px-3 text-xs hover:bg-accent transition-colors border-l border-black shrink-0"
-        >Apply</button>
-      </div>
-    </div>
 
     {#if !showModel}
       <!-- Search -->

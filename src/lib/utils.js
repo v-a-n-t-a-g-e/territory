@@ -61,17 +61,33 @@ export async function downloadData({
         texture.colorSpace = THREE.SRGBColorSpace;
         const { tops, sides } = splitByFaceOrientation(buildingGeometry, uvRef);
         if (tops)  group.add(new THREE.Mesh(tops,  new THREE.MeshBasicMaterial({ map: texture })));
-        if (sides) group.add(new THREE.Mesh(sides, new THREE.MeshStandardMaterial({ color: new THREE.Color(buildingColor) })));
+        if (sides) group.add(new THREE.Mesh(sides, new THREE.MeshBasicMaterial({ color: new THREE.Color(buildingColor) })));
       } else {
-        group.add(new THREE.Mesh(buildingGeometry, new THREE.MeshStandardMaterial({ color: new THREE.Color(buildingColor) })));
+        group.add(new THREE.Mesh(buildingGeometry, new THREE.MeshBasicMaterial({ color: new THREE.Color(buildingColor) })));
       }
+      // buildingFactory may produce Groups with MeshStandardMaterial — flatten to Basic
+      group.traverse((child) => {
+        if (child.isMesh && child.material?.type === 'MeshStandardMaterial') {
+          const color = child.material.color?.clone();
+          child.material.dispose();
+          child.material = new THREE.MeshBasicMaterial({ color });
+        }
+      });
       scene.add(group);
     }
 
     // Land features (roads, parks, water, etc.) — omitted when ground texture is projected
     if (!textureGround) {
       const featureMeshes = generateFeaturesGeometry(clippedGeoJSON, referencePoint, getElevation, featurePalette);
-      for (const m of featureMeshes) scene.add(m);
+      for (const m of featureMeshes) {
+        // Convert to MeshBasicMaterial so colors are viewer-independent
+        if (m.material) {
+          const color = m.material.color?.clone();
+          m.material.dispose();
+          m.material = new THREE.MeshBasicMaterial({ color });
+        }
+        scene.add(m);
+      }
     }
 
     // Ground: terrain mesh when elevation is enabled, flat polygon otherwise
@@ -88,7 +104,7 @@ export async function downloadData({
           child.material = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });
         } else {
           child.material.dispose();
-          child.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(groundColor), side: THREE.DoubleSide });
+          child.material = new THREE.MeshBasicMaterial({ color: new THREE.Color(groundColor), side: THREE.DoubleSide });
         }
       });
       scene.add(groundObj);
