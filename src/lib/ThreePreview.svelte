@@ -320,10 +320,49 @@ function buildGroundMesh(canvas, elevData) {
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-    const sun = new THREE.DirectionalLight(0xffffff, 0.6);
-    sun.position.set(-300, 500, 200);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    sun.position.set(10, 20, 10);
     scene.add(sun);
+
+    // Infinite grid — fades with camera distance, gives depth reference
+    const gridMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      uniforms: { uCamPos: { value: camera.position } },
+      vertexShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldPos = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vWorldPos;
+        uniform vec3 uCamPos;
+        void main() {
+          float dist = length(vWorldPos.xz - uCamPos.xz);
+          float fade = 1.0 - smoothstep(0.0, 6000.0, dist);
+          vec2 coord = vWorldPos.xz;
+          vec2 g1 = abs(fract(coord / 10.0  - 0.5) - 0.5) / fwidth(coord / 10.0);
+          vec2 g2 = abs(fract(coord / 100.0 - 0.5) - 0.5) / fwidth(coord / 100.0);
+          float line1 = min(min(g1.x, g1.y), 1.0);
+          float line2 = min(min(g2.x, g2.y), 1.0);
+          float grid = min(line1 * 0.4 + line2 * 0.7, 1.0);
+          float alpha = (1.0 - grid) * fade * 0.35;
+          gl_FragColor = vec4(0.45, 0.45, 0.45, alpha);
+        }
+      `,
+    });
+    const gridMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), gridMat);
+    gridMesh.rotation.x = -Math.PI / 2;
+    gridMesh.scale.setScalar(200000);
+    gridMesh.renderOrder = -1;
+    gridMesh.userData.grid = true;
+    scene.add(gridMesh);
+
 
     resize();
     const ro = new ResizeObserver(resize);
@@ -345,6 +384,7 @@ function buildGroundMesh(canvas, elevData) {
     function loop() {
       rafId = requestAnimationFrame(loop);
       controls.update();
+      gridMat.uniforms.uCamPos.value.copy(camera.position);
       renderer.render(scene, camera);
     }
     loop();
