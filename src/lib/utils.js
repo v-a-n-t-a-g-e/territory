@@ -10,6 +10,7 @@ export async function downloadData({
   clippedGeoJSON, latlngs, southWest, northEast, selectedLayer, referencePoint,
   textureGround = true, textureBuildings = false, useElevation = false, groundDepth = 0,
   featurePalette = DEFAULT_PALETTE, groundColor = '#cccccc', buildingColor = '#fafafa',
+  anchoredMinElevationMSL = null,
 }) {
   if (!clippedGeoJSON) return;
 
@@ -36,19 +37,34 @@ export async function downloadData({
     }
   }
 
-  // getElevation(lat, lng) → metres above terrain minimum (0 = lowest point in bbox)
+  // Geometry stays in natural local space: Y=0 = lowest terrain point in this bbox.
+  // When anchored, a Y translation on the root group aligns the model in world space
+  // without touching vertex data. yOffset = thisModel.minElevation - anchor.minElevationMSL.
   const getElevation = elevationData
     ? (lat, lng) => elevationData.sampleAtLatLng(lat, lng) - elevationData.minElevation
     : null;
+  const yOffset = (elevationData && anchoredMinElevationMSL != null)
+    ? elevationData.minElevation - anchoredMinElevationMSL
+    : 0;
+  // minElevationMSL in metadata = world elevation of geometry Y=0 (accounts for the offset).
+  const minElevationMSL = anchoredMinElevationMSL ?? elevationData?.minElevation ?? null;
 
   const scene = new THREE.Scene();
-  // Geo metadata embedded in GLB extras
+  // Geo metadata embedded in GLB extras.
+  // minElevationMSL: absolute elevation (m MSL) at world Y=0; null for flat (no-DEM) exports.
   scene.userData = {
     source: 'https://github.com/v-a-n-t-a-g-e/territory',
     bbox,
     referencePoint,
     clipPath: latlngs,
+    minElevationMSL,
   };
+
+  // Root group carries the world-alignment Y offset so geometry is unmodified.
+  const root = new THREE.Group();
+  root.name = 'World';
+  root.position.y = yOffset;
+  scene.add(root);
 
   try {
     const buildingGeometry = generateMergedBuildingsGeometry(clippedGeoJSON, referencePoint, getElevation);
@@ -65,13 +81,13 @@ export async function downloadData({
       } else {
         group.add(new THREE.Mesh(buildingGeometry, new THREE.MeshStandardMaterial({ color: new THREE.Color(buildingColor) })));
       }
-      scene.add(group);
+      root.add(group);
     }
 
     // Land features (roads, parks, water, etc.) — omitted when ground texture is projected
     if (!textureGround) {
       const featureMeshes = generateFeaturesGeometry(clippedGeoJSON, referencePoint, getElevation, featurePalette);
-      for (const m of featureMeshes) scene.add(m);
+      for (const m of featureMeshes) root.add(m);
     }
 
     // Ground: terrain mesh when elevation is enabled, flat polygon otherwise
@@ -91,7 +107,7 @@ export async function downloadData({
           child.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(groundColor), side: THREE.DoubleSide });
         }
       });
-      scene.add(groundObj);
+      root.add(groundObj);
     }
 
     const exporter = new GLTFExporter();

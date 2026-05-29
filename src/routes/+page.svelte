@@ -6,7 +6,9 @@
     referencePoint,
     heightStore,
     fallbackHeightStore,
+    anchoredOrigin,
   } from "$lib/stores.js";
+  import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
   import { fetchData, clipData } from "$lib/overpass.js";
   import { downloadData } from "$lib/utils.js";
   import { DEFAULT_PALETTE } from "$lib/featureFactory.js";
@@ -32,6 +34,42 @@
   let loading = $state("");
   let fetchStatus = $state("");
   let error = $state("");
+
+  // Anchor import
+  let anchorFileInput = $state(null);
+
+  async function importAnchor(file) {
+    if (!file) return;
+    const buffer = await file.arrayBuffer();
+    const loader = new GLTFLoader();
+    loader.parse(
+      buffer,
+      "",
+      (gltf) => {
+        const ud = gltf.scene.userData;
+        if (!ud?.referencePoint || !ud?.bbox) {
+          error = "Not a valid Territory GLB — missing anchor metadata.";
+          return;
+        }
+        $anchoredOrigin = {
+          referencePoint: ud.referencePoint,
+          minElevationMSL: ud.minElevationMSL ?? null,
+          bbox: ud.bbox,
+        };
+        // bbox: [sw.lng, sw.lat, ne.lng, ne.lat]
+        flyTo = {
+          bounds: [
+            [ud.bbox[1], ud.bbox[0]],
+            [ud.bbox[3], ud.bbox[2]],
+          ],
+        };
+      },
+      (err) => {
+        error = "Failed to parse GLB file.";
+        console.error(err);
+      },
+    );
+  }
 
   // Search
   let searchQuery = $state("");
@@ -70,7 +108,6 @@
 
   const canFetch = $derived(!!area && area <= 25_000_000);
   const tooLarge = $derived(!!area && area > 25_000_000);
-
 
   async function searchLocation() {
     const q = searchQuery.trim();
@@ -141,7 +178,8 @@
       clipData(latlngs, osmGeoJSON, clippedGeoJSON);
       showModel = true;
     } catch (err) {
-      if (err.name !== 'AbortError') error = err.message ?? "Overpass API unavailable.";
+      if (err.name !== "AbortError")
+        error = err.message ?? "Overpass API unavailable.";
     }
     loading = "";
     fetchStatus = "";
@@ -158,7 +196,7 @@
         southWest,
         northEast,
         selectedLayer,
-        referencePoint: $referencePoint,
+        referencePoint: $anchoredOrigin?.referencePoint ?? $referencePoint,
         textureGround,
         textureBuildings,
         useElevation,
@@ -166,6 +204,7 @@
         featurePalette,
         groundColor,
         buildingColor,
+        anchoredMinElevationMSL: $anchoredOrigin?.minElevationMSL ?? null,
       });
     } catch (err) {
       error = err.message ?? "Export failed.";
@@ -225,7 +264,6 @@
   >
     <!-- Tile layers (always visible) -->
     <Layers bind:selectedLayer />
-
 
     {#if !showModel}
       <!-- Search -->
@@ -291,16 +329,19 @@
         <button
           onclick={backToMap}
           class="h-10 text-left text-base px-3 transition-colors hover:bg-accent"
-        >← Map</button>
+          >← Map</button
+        >
       {:else if $clippedGeoJSON}
         <button
           onclick={() => (showModel = true)}
           class="h-10 text-left text-base px-3 transition-colors hover:bg-accent"
-        >→ Model</button>
+          >→ Model</button
+        >
         <button
           onclick={clearArea}
           class="h-10 text-left text-base px-3 transition-colors hover:bg-accent"
-        >Redraw</button>
+          >Redraw</button
+        >
       {:else if !area}
         <div class="h-10 px-3 flex items-center text-base text-gray-400">
           Draw a shape on the map.
@@ -315,12 +356,15 @@
         <div class="px-3 py-2 text-base text-red-600">{error}</div>
       {/if}
       {#if fetchStatus}
-        <div class="h-10 px-3 flex items-center justify-between text-xs text-gray-400">
+        <div
+          class="h-10 px-3 flex items-center justify-between text-xs text-gray-400"
+        >
           <span>{fetchStatus}</span>
           <button
             onclick={() => fetchController?.abort()}
             class="text-xs text-black hover:bg-accent px-2 h-full transition-colors"
-          >Stop</button>
+            >Stop</button
+          >
         </div>
       {/if}
 
@@ -342,7 +386,9 @@
           onclick={getData}
           disabled={loading === "fetch"}
           class="h-10 text-left text-base px-3 transition-colors
-            {loading === 'fetch' ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-accent'}"
+            {loading === 'fetch'
+            ? 'text-gray-300 cursor-not-allowed'
+            : 'hover:bg-accent'}"
         >
           {loading === "fetch" ? "Fetching…" : "Generate 3D model"}
         </button>
@@ -353,12 +399,60 @@
           onclick={download}
           disabled={loading === "download"}
           class="h-10 text-left text-base px-3 transition-colors
-            {loading === 'download' ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-accent'}"
+            {loading === 'download'
+            ? 'text-gray-300 cursor-not-allowed'
+            : 'hover:bg-accent'}"
         >
           {loading === "download" ? "Exporting…" : "Export Scene"}
         </button>
       {/if}
     </div>
+
+    <!-- Anchor import (always visible) -->
+    <div
+      class="flex flex-col bg-white border border-black divide-y divide-black"
+    >
+      {#if $anchoredOrigin}
+        <div class="px-3 py-2 flex flex-col gap-0.5">
+          <div class="flex items-center justify-between">
+            <span class="text-base font-medium">Anchor active</span>
+            <button
+              onclick={() => ($anchoredOrigin = null)}
+              class="text-base text-gray-400 hover:text-black transition-colors px-1"
+              title="Clear anchor">✕</button
+            >
+          </div>
+          <span class="text-xs text-gray-500">
+            {$anchoredOrigin.referencePoint[1].toFixed(5)}, {$anchoredOrigin.referencePoint[0].toFixed(
+              5,
+            )}
+          </span>
+          {#if $anchoredOrigin.minElevationMSL != null}
+            <span class="text-xs text-gray-500"
+              >Y=0 at {$anchoredOrigin.minElevationMSL.toFixed(1)} m MSL</span
+            >
+          {:else}
+            <span class="text-xs text-gray-400">Horizontal anchor only</span>
+          {/if}
+        </div>
+      {:else}
+        <button
+          onclick={() => anchorFileInput?.click()}
+          class="h-10 text-left text-base px-3 transition-colors hover:bg-accent text-gray-500"
+          >Import Territory GLB</button
+        >
+      {/if}
+    </div>
+    <input
+      bind:this={anchorFileInput}
+      type="file"
+      accept=".glb"
+      class="hidden"
+      onchange={(e) => {
+        importAnchor(e.target.files?.[0]);
+        e.target.value = "";
+      }}
+    />
   </div>
 
   <!-- ── Right overlay: scene settings (only after fetch) ─────────────────── -->

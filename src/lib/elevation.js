@@ -147,6 +147,7 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
   if (!latlngs) return createTerrainMesh(southWest, northEast, referencePoint, elevationData, mapCanvas, segments);
 
   const { sampleAtLatLng, minElevation } = elevationData;
+  const baseline = minElevation;
 
   // Build the clipping polygon once
   let clipPoly = null;
@@ -179,7 +180,7 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
       const lat = northEast.lat + (southWest.lat - northEast.lat) * t;
       const lng = southWest.lng + (northEast.lng - southWest.lng) * s;
       const { x: sx, y: sy } = toLocal(lng, lat, referencePoint);
-      const elev = sampleAtLatLng(lat, lng) - minElevation;
+      const elev = sampleAtLatLng(lat, lng) - baseline;
       vx.push(-sy); vy.push(elev); vz.push(-sx);
       vu.push(uRange !== 0 ? (sw.y - sy) / uRange : s);
       vv.push(vRange !== 0 ? (sx - sw.x) / vRange : (1 - t));
@@ -206,7 +207,7 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
       for (let k = 1; k < coords.length - 2; k++) {
         for (const [lng, lat] of [coords[0], coords[k], coords[k + 1]]) {
           const { x: sx, y: sy } = toLocal(lng, lat, referencePoint);
-          const elev = sampleAtLatLng(lat, lng) - minElevation;
+          const elev = sampleAtLatLng(lat, lng) - baseline;
           pos.push(-sy, elev, -sx);
           uv.push(
             uRange !== 0 ? (sw.y - sy) / uRange : 0.5,
@@ -254,7 +255,7 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
   for (let k = 0; k < ring.length; k++) {
     const [lng, lat] = ring[k];
     const { x: sx, y: sy } = toLocal(lng, lat, referencePoint);
-    const elev = sampleAtLatLng(lat, lng) - minElevation;
+    const elev = sampleAtLatLng(lat, lng) - baseline;
     skirtPos[k * 6]     = -sy; skirtPos[k * 6 + 1] = elev;   skirtPos[k * 6 + 2] = -sx; // top
     skirtPos[k * 6 + 3] = -sy; skirtPos[k * 6 + 4] = -depth; skirtPos[k * 6 + 5] = -sx; // bottom
   }
@@ -305,6 +306,7 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
 // Correct CCW winding from above: (a, c, b) and (b, c, d).
 export function createTerrainMesh(southWest, northEast, referencePoint, elevationData, mapCanvas, segments = 64, depth = 0) {
   const { sampleAtLatLng, minElevation } = elevationData;
+  const baseline = minElevation;
 
   const sw = toLocal(southWest.lng, southWest.lat, referencePoint);
   const ne = toLocal(northEast.lng, northEast.lat, referencePoint);
@@ -325,7 +327,7 @@ export function createTerrainMesh(southWest, northEast, referencePoint, elevatio
       const lng = southWest.lng + (northEast.lng - southWest.lng) * s;
 
       const { x: sx, y: sy } = toLocal(lng, lat, referencePoint);
-      const elev = sampleAtLatLng(lat, lng) - minElevation;
+      const elev = sampleAtLatLng(lat, lng) - baseline;
 
       const idx = i * cols + j;
       // Direct 3D placement: (-sy, elev, -sx) — same as shape-space then rotating
