@@ -250,18 +250,30 @@ export function createClippedTerrainMesh(latlngs, southWest, northEast, referenc
   if (depth <= 0) return mesh;
 
   // Skirt: top follows the terrain surface, bottom is flat at y = -depth.
-  const ring = clipPoly.geometry.coordinates[0]; // [[lng, lat], ...]
-  const skirtPos = new Float32Array(ring.length * 6);
-  for (let k = 0; k < ring.length; k++) {
-    const [lng, lat] = ring[k];
+  // Densify each polygon edge with `segments` samples so the top edge traces terrain elevation.
+  const ring = clipPoly.geometry.coordinates[0]; // [[lng, lat], ...] closed ring
+  const skirtRing = [];
+  const numRingEdges = ring.length - 1;
+  for (let k = 0; k < numRingEdges; k++) {
+    const [lng0, lat0] = ring[k];
+    const [lng1, lat1] = ring[k + 1];
+    for (let s = 0; s < segments; s++) {
+      const t = s / segments;
+      skirtRing.push([lng0 + (lng1 - lng0) * t, lat0 + (lat1 - lat0) * t]);
+    }
+  }
+  const skirtPos = new Float32Array(skirtRing.length * 6);
+  for (let k = 0; k < skirtRing.length; k++) {
+    const [lng, lat] = skirtRing[k];
     const { x: sx, y: sy } = toLocal(lng, lat, referencePoint);
     const elev = sampleAtLatLng(lat, lng) - baseline;
     skirtPos[k * 6]     = -sy; skirtPos[k * 6 + 1] = elev;   skirtPos[k * 6 + 2] = -sx; // top
     skirtPos[k * 6 + 3] = -sy; skirtPos[k * 6 + 4] = -depth; skirtPos[k * 6 + 5] = -sx; // bottom
   }
   const skirtIdx = [];
-  for (let k = 0; k < ring.length; k++) {
-    const next = (k + 1) % ring.length;
+  const skirtN = skirtRing.length;
+  for (let k = 0; k < skirtN; k++) {
+    const next = (k + 1) % skirtN;
     const at = k * 2, ab = k * 2 + 1, bt = next * 2, bb = next * 2 + 1;
     skirtIdx.push(at, bt, ab);
     skirtIdx.push(bt, bb, ab);
@@ -383,7 +395,7 @@ export function createTerrainMesh(southWest, northEast, referencePoint, elevatio
     const vi = perimeter[k] * 3;
     const x = positions[vi], y = positions[vi + 1], z = positions[vi + 2];
     skirtPos[k * 6]     = x; skirtPos[k * 6 + 1] = y;         skirtPos[k * 6 + 2] = z; // top
-    skirtPos[k * 6 + 3] = x; skirtPos[k * 6 + 4] = y - depth; skirtPos[k * 6 + 5] = z; // bottom
+    skirtPos[k * 6 + 3] = x; skirtPos[k * 6 + 4] = -depth;    skirtPos[k * 6 + 5] = z; // bottom (flat)
   }
   const skirtIdx = [];
   for (let k = 0; k < perimeter.length; k++) {
