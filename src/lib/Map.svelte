@@ -19,8 +19,14 @@
   function setupLayer(layer) {
     if (!map) return;
     if (currentLayer) { map.removeLayer(currentLayer); currentLayer = null; }
-    if (!layer?.value) return;
-    currentLayer = L.tileLayer(layer.value, { attribution: layer.attribution ?? '' }).addTo(map);
+    if (!layer) return;
+    if (layer.type === 'geotiff') {
+      currentLayer = L.imageOverlay(layer.imageUrl, layer.bounds, { attribution: '' }).addTo(map);
+      map.fitBounds(layer.bounds);
+    } else {
+      if (!layer.value) return;
+      currentLayer = L.tileLayer(layer.value, { attribution: layer.attribution ?? '' }).addTo(map);
+    }
   }
 
   function addGeoJSONToMap(geoJSON) {

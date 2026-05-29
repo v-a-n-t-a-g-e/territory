@@ -283,6 +283,23 @@ export function createTexturedGround(latlngs, southWest, northEast, referencePoi
 export async function fetchTilesAndRenderCanvas(latlngs, southWest, northEast, selectedLayer) {
   if (!latlngs || !selectedLayer) return null;
 
+  if (selectedLayer.type === 'geotiff') {
+    const { canvas, bounds } = selectedLayer;
+    const [south, west] = bounds[0];
+    const [north, east] = bounds[1];
+    const scaleX = canvas.width  / (east  - west);
+    const scaleY = canvas.height / (north - south);
+    const px = (southWest.lng - west)  * scaleX;
+    const py = (north - northEast.lat) * scaleY;
+    const pw = (northEast.lng - southWest.lng) * scaleX;
+    const ph = (northEast.lat - southWest.lat) * scaleY;
+    const clipped = document.createElement('canvas');
+    clipped.width  = Math.round(pw);
+    clipped.height = Math.round(ph);
+    clipped.getContext('2d').drawImage(canvas, px, py, pw, ph, 0, 0, Math.round(pw), Math.round(ph));
+    return clipped;
+  }
+
   const tileSize = 256;
   const zoomLevel = 18;
 
